@@ -231,7 +231,7 @@ dn_strerror(dyn_error_t err)
         case PEER_HOST_NOT_CONNECTED:
             return "Peer Node is not connected";
         default:
-            return strerror(err);
+			return socket_strerror(err);
     }
 }
 

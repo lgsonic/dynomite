@@ -20,8 +20,6 @@
  * limitations under the License.
  */
 
-#include <sys/uio.h>
-
 #include "dyn_core.h"
 #include "dyn_server.h"
 #include "dyn_client.h"
@@ -99,7 +97,7 @@ static struct conn_tqh free_connq; /* free conn q */
 consistency_t g_read_consistency = DEFAULT_READ_CONSISTENCY;
 consistency_t g_write_consistency = DEFAULT_WRITE_CONSISTENCY;
 
-inline char *
+char *
 conn_get_type_string(struct conn *conn)
 {
     switch(conn->type) {
@@ -237,7 +235,7 @@ conn_set_read_consistency(struct conn *conn, consistency_t cons)
     conn->read_consistency = cons;
 }
 
-inline consistency_t
+consistency_t
 conn_get_read_consistency(struct conn *conn)
 {
     //return conn->read_consistency;
@@ -250,7 +248,7 @@ conn_set_write_consistency(struct conn *conn, consistency_t cons)
     conn->write_consistency = cons;
 }
 
-inline consistency_t
+consistency_t
 conn_get_write_consistency(struct conn *conn)
 {
     //return conn->write_consistency;
@@ -419,14 +417,16 @@ static rstatus_t
 conn_reuse(struct conn *p)
 {
     rstatus_t status;
+#ifndef WIN32
     struct sockaddr_un *un;
+#endif
 
     switch (p->family) {
     case AF_INET:
     case AF_INET6:
         status = dn_set_reuseaddr(p->sd);
         break;
-
+#ifndef WIN32
     case AF_UNIX:
         /*
          * bind() will fail if the pathname already exist. So, we call unlink()
@@ -437,7 +437,7 @@ conn_reuse(struct conn *p)
         unlink(un->sun_path);
         status = DN_OK;
         break;
-
+#endif
     default:
         NOT_REACHED();
         status = DN_ERROR;
@@ -457,7 +457,7 @@ conn_listen(struct context *ctx, struct conn *p)
 
     p->sd = socket(p->family, SOCK_STREAM, 0);
     if (p->sd < 0) {
-        log_error("socket failed: %s", strerror(errno));
+		log_error("socket failed: %s", socket_strerror(errno));
         return DN_ERROR;
     }
 
@@ -465,28 +465,28 @@ conn_listen(struct context *ctx, struct conn *p)
     if (status < 0) {
         log_error("reuse of addr '%.*s' for listening on p %d failed: %s",
                   p->pname.len, p->pname.data, p->sd,
-                  strerror(errno));
+				  socket_strerror(errno));
         return DN_ERROR;
     }
 
     status = bind(p->sd, p->addr, p->addrlen);
     if (status < 0) {
         log_error("bind on p %d to addr '%.*s' failed: %s", p->sd,
-                  p->pname.len, p->pname.data, strerror(errno));
+                  p->pname.len, p->pname.data, socket_strerror(errno));
         return DN_ERROR;
     }
 
     status = listen(p->sd, pool->backlog);
     if (status < 0) {
         log_error("listen on p %d on addr '%.*s' failed: %s", p->sd,
-                  p->pname.len, p->pname.data, strerror(errno));
+                  p->pname.len, p->pname.data, socket_strerror(errno));
         return DN_ERROR;
     }
 
     status = dn_set_nonblocking(p->sd);
     if (status < 0) {
         log_error("set nonblock on p %d on addr '%.*s' failed: %s", p->sd,
-                  p->pname.len, p->pname.data, strerror(errno));
+                  p->pname.len, p->pname.data, socket_strerror(errno));
         return DN_ERROR;
     }
 
@@ -494,7 +494,7 @@ conn_listen(struct context *ctx, struct conn *p)
     if (status < 0) {
         log_error("event add conn p %d on addr '%.*s' failed: %s",
                   p->sd, p->pname.len, p->pname.data,
-                  strerror(errno));
+				  socket_strerror(errno));
         return DN_ERROR;
     }
 
@@ -502,7 +502,7 @@ conn_listen(struct context *ctx, struct conn *p)
     if (status < 0) {
         log_error("event del out p %d on addr '%.*s' failed: %s",
                   p->sd, p->pname.len, p->pname.data,
-                  strerror(errno));
+				  socket_strerror(errno));
         return DN_ERROR;
     }
 
@@ -528,7 +528,7 @@ conn_connect(struct context *ctx, struct conn *conn)
     conn->sd = socket(conn->family, SOCK_STREAM, 0);
     if (conn->sd < 0) {
         log_error("dyn: socket for '%.*s' failed: %s", conn->pname.len,
-                conn->pname.data, strerror(errno));
+                conn->pname.data, socket_strerror(errno));
         status = DN_ERROR;
         goto error;
     }
@@ -540,14 +540,14 @@ conn_connect(struct context *ctx, struct conn *conn)
     if (status != DN_OK) {
         log_error("set nonblock on s %d for '%.*s' failed: %s",
                 conn->sd,  conn->pname.len, conn->pname.data,
-                strerror(errno));
+				socket_strerror(errno));
         goto error;
     }
     status = dn_set_keepalive(conn->sd, DYN_KEEPALIVE_INTERVAL_S);
     if (status != DN_OK) {
         log_error("set keepalive on s %d for '%.*s' failed: %s",
                 conn->sd,  conn->pname.len, conn->pname.data,
-                strerror(errno));
+				socket_strerror(errno));
         // Continue since this is not catastrophic
     }
     
@@ -557,7 +557,7 @@ conn_connect(struct context *ctx, struct conn *conn)
         if (status != DN_OK) {
             log_warn("set tcpnodelay on s %d for '%.*s' failed, ignored: %s",
                     conn->sd, conn->pname.len, conn->pname.data,
-                    strerror(errno));
+					socket_strerror(errno));
         }
     }
 
@@ -565,7 +565,7 @@ conn_connect(struct context *ctx, struct conn *conn)
     if (status != DN_OK) {
         log_error("event add conn s %d for '%.*s' failed: %s",
                 conn->sd, conn->pname.len, conn->pname.data,
-                strerror(errno));
+				socket_strerror(errno));
         goto error;
     }
 
@@ -574,15 +574,18 @@ conn_connect(struct context *ctx, struct conn *conn)
     status = connect(conn->sd, conn->addr, conn->addrlen);
 
     if (status != DN_OK) {
+#ifdef WIN32
+		if (errno == WSAEWOULDBLOCK || errno == WSAEINPROGRESS) {
+#else
         if (errno == EINPROGRESS) {
+#endif
             conn->connecting = 1;
             log_debug(LOG_DEBUG, "connecting on s %d to '%.*s'",
                     conn->sd, conn->pname.len, conn->pname.data);
             return DN_OK;
         }
-
-        log_error("connect on s %d to '%.*s' failed: %s", conn->sd,
-                conn->pname.len, conn->pname.data, strerror(errno));
+		log_error("connect on s %d to '%.*s' failed: %s", conn->sd,
+                conn->pname.len, conn->pname.data, socket_strerror(errno));
 
         goto error;
     }
@@ -611,9 +614,13 @@ conn_recv_data(struct conn *conn, void *buf, size_t size)
     ASSERT(conn->recv_ready);
 
     for (;;) {
-        n = dn_read(conn->sd, buf, size);
+#ifdef WIN32
 
-        log_debug(LOG_VERB, "recv on sd %d %zd of %zu", conn->sd, n, size);
+		n = dn_recvn(conn->sd, buf, size);
+#else
+        n = dn_read(conn->sd, buf, size);
+#endif
+		log_debug(LOG_VERB, "recv on sd %d %"PRIdPTR" of %"PRIuPTR"", conn->sd, n, size);
 
         if (n > 0) {
             if (n < (ssize_t) size) {
@@ -628,22 +635,30 @@ conn_recv_data(struct conn *conn, void *buf, size_t size)
             conn->recv_ready = 0;
             conn->eof = 1;
             conn->non_bytes_recv++;
-            log_debug(LOG_NOTICE, "recv on sd %d eof rb %zu sb %zu", conn->sd,
+			log_debug(LOG_NOTICE, "recv on sd %d eof rb %"PRIuPTR" sb %"PRIuPTR"", conn->sd,
                       conn->recv_bytes, conn->send_bytes);
             return n;
         }
 
-        if (errno == EINTR) {
-            log_debug(LOG_VERB, "recv on sd %d not ready - eintr", conn->sd);
-            continue;
-        } else if (errno == EAGAIN || errno == EWOULDBLOCK) {
+#ifdef WIN32
+		if (errno == WSAEINTR) {
+#else
+		if (errno == EINTR) {
+#endif
+			log_debug(LOG_VERB, "recv on sd %d not ready - eintr", conn->sd);
+			continue;
+#ifdef WIN32
+		} else if (errno == WSAEWOULDBLOCK) {
+#else
+		} else if (errno == EAGAIN || errno == EWOULDBLOCK) {
+#endif
             conn->recv_ready = 0;
             log_debug(LOG_VERB, "recv on sd %d not ready - eagain", conn->sd);
             return DN_EAGAIN;
         } else {
             conn->recv_ready = 0;
             conn->err = errno;
-            log_error("recv on sd %d failed: %s", conn->sd, strerror(errno));
+			log_error("recv on sd %d failed: %s", conn->sd, socket_strerror(errno));
             return DN_ERROR;
         }
     }
@@ -665,7 +680,7 @@ conn_sendv_data(struct conn *conn, struct array *sendv, size_t nsend)
     for (;;) {
         n = dn_writev(conn->sd, sendv->elem, sendv->nelem);
 
-        log_debug(LOG_VERB, "sendv on sd %d %zd of %zu in %"PRIu32" buffers",
+		log_debug(LOG_VERB, "sendv on sd %d %"PRIdPTR" of %"PRIuPTR" in %"PRIu32" buffers",
                   conn->sd, n, nsend, sendv->nelem);
 
         if (n > 0) {
@@ -687,17 +702,25 @@ conn_sendv_data(struct conn *conn, struct array *sendv, size_t nsend)
             return 0;
         }
 
-        if (errno == EINTR) {
+#ifdef WIN32
+		if (errno == WSAEINTR) {
+#else
+		if (errno == EINTR) {
+#endif
             log_debug(LOG_VERB, "sendv on sd %d not ready - eintr", conn->sd);
             continue;
-        } else if (errno == EAGAIN || errno == EWOULDBLOCK) {
+#ifdef WIN32
+		} else if (errno == WSAEWOULDBLOCK) {
+#else
+		} else if (errno == EAGAIN || errno == EWOULDBLOCK) {
+#endif
             conn->send_ready = 0;
             log_debug(LOG_VERB, "sendv on sd %d not ready - eagain", conn->sd);
             return DN_EAGAIN;
         } else {
             conn->send_ready = 0;
             conn->err = errno;
-            log_error("sendv on sd %d failed: %s", conn->sd, strerror(errno));
+			log_error("sendv on sd %d failed: %s", conn->sd, socket_strerror(errno));
             return DN_ERROR;
         }
     }

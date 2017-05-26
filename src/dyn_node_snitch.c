@@ -1,11 +1,6 @@
 #include<stdio.h>
 #include<string.h>
 #include<stdlib.h>
-#include<sys/socket.h>
-#include<errno.h>
-#include<netdb.h>
-#include<arpa/inet.h>
-#include <ctype.h>
 
 #include "dyn_node_snitch.h"
 #include "dyn_core.h"

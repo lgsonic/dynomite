@@ -744,7 +744,11 @@ done:
 error:
     r->result = MSG_PARSE_ERROR;
     r->state = state;
-    errno = EINVAL;
+#ifdef WIN32
+	WSASetLastError(WSAEINVAL);
+#else
+	errno = EINVAL;
+#endif
 
     log_hexdump(LOG_INFO, b->pos, mbuf_length(b), "parsed bad req %"PRIu64" "
                 "res %d type %d state %d", r->id, r->result, r->type,
@@ -1206,7 +1210,11 @@ done:
 error:
     r->result = MSG_PARSE_ERROR;
     r->state = state;
-    errno = EINVAL;
+#ifdef WIN32
+	WSASetLastError(WSAEINVAL);
+#else
+	errno = EINVAL;
+#endif
 
     log_hexdump(LOG_INFO, b->pos, mbuf_length(b), "parsed bad rsp %"PRIu64" "
                 "res %d type %d state %d", r->id, r->result, r->type,

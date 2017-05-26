@@ -18,18 +18,11 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <fcntl.h> // for open
-#include <unistd.h> //for close
 #include <math.h> // to do ceil for number of chunks
 
 #include <openssl/conf.h>
 #include <openssl/evp.h>
 #include <openssl/err.h>
-
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
 
 #include "dyn_core.h"
 
@@ -52,7 +45,7 @@ entropy_redis_connector(){
     	log_error("open socket to Redis failed");
     	return -1;
     }
-    bzero((char *) &serv_addr, sizeof(serv_addr));
+    memset((char *) &serv_addr, 0, sizeof(serv_addr));
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK); /* set destination IP number - localhost, 127.0.0.1*/
     serv_addr.sin_port = htons(22122);
@@ -66,6 +59,8 @@ entropy_redis_connector(){
 
 }
 
+extern void entropy_crypto_init();
+
 /*
  * Function:  entropy_rcv_start
  * --------------------
@@ -77,16 +72,18 @@ rstatus_t
 entropy_rcv_start(int peer_socket, int header_size, int buffer_size, int cipher_size){
 
     int 			redis_socket = 0;
-    char 			aof[buffer_size];
-    char            buff[buffer_size];
-    unsigned char ciphertext[cipher_size];
+    char 			*aof;
+    char            *buff;
+    unsigned char   *ciphertext;
     int32_t 		keyValueLength;
     int32_t			tempInt;
     int 			i = 0;
     int 			numberOfKeys;
 	int redis_written_bytes = 0;
 
-
+	aof = (char*)malloc(buffer_size);
+	buff = (char*)malloc(buffer_size);
+	ciphertext = (unsigned char*)malloc(cipher_size);
 
     /* Check the encryption flag and initialize the crypto */
     if(DECRYPT_FLAG == 1){
@@ -100,7 +97,7 @@ entropy_rcv_start(int peer_socket, int header_size, int buffer_size, int cipher_
     if(DECRYPT_FLAG == 1) {
     	int bytesRead = read(peer_socket, ciphertext, cipher_size);
     	if( bytesRead < 1 ){
-    	    log_error("Error on receiving number of keys --> %s", strerror(errno));
+			log_error("Error on receiving number of keys --> %s", socket_strerror(errno));
     	    goto error;
     	}
     	loga("Bytes read %d", bytesRead);
@@ -109,12 +106,12 @@ entropy_rcv_start(int peer_socket, int header_size, int buffer_size, int cipher_
         	log_error("Error decrypting the AOF file size");
          	goto error;
     	}
-    	numberOfKeys = ntohl(buff);
+		numberOfKeys = ntohl(*(u_long*)buff);
 
     }
     else{
         if( read(peer_socket, &tempInt, sizeof(int32_t)) < 1 ){
-        	log_error("Error on receiving number of keys --> %s", strerror(errno));
+			log_error("Error on receiving number of keys --> %s", socket_strerror(errno));
         	goto error;
         }
         numberOfKeys = ntohl(tempInt);
@@ -144,7 +141,7 @@ entropy_rcv_start(int peer_socket, int header_size, int buffer_size, int cipher_
     	 */
         if(DECRYPT_FLAG == 1) {
         	if( read(peer_socket, ciphertext, cipher_size) < 1 ){
-        	   log_error("Error on receiving aof size --> %s", strerror(errno));
+        	   log_error("Error on receiving aof size --> %s", socket_strerror(errno));
         	   goto error;
         	}
            	if( entropy_decrypt (ciphertext, buffer_size, buff) < 0 )
@@ -152,11 +149,11 @@ entropy_rcv_start(int peer_socket, int header_size, int buffer_size, int cipher_
                 log_error("Error decrypting the buffer for AOF file size");
                 goto error;
             }
-           	keyValueLength = ntohl(buff);
+			keyValueLength = ntohl(*(u_long*)buff);
         	log_info("AOF Length: %d", keyValueLength);
-            memset(&aof[0], 0, sizeof(aof));
+			memset(&aof[0], 0, buffer_size);
             if( read(peer_socket, ciphertext, cipher_size) < 1 ){
-                log_error("Error on receiving aof size --> %s", strerror(errno));
+				log_error("Error on receiving aof size --> %s", socket_strerror(errno));
                 goto error;
             }
             if( entropy_decrypt (ciphertext, buffer_size, aof) < 0 )		//TODO: I am not sure the buffer_size is correct here.
@@ -168,23 +165,23 @@ entropy_rcv_start(int peer_socket, int header_size, int buffer_size, int cipher_
         else{
         	/* Step 1: Read the key/Value size */
            	if( read(peer_socket, &keyValueLength, sizeof(int32_t)) < 1 ){
-            	log_error("Error on receiving aof size --> %s", strerror(errno));
+				log_error("Error on receiving aof size --> %s", socket_strerror(errno));
             	goto error;
             }
            	keyValueLength = ntohl(keyValueLength);
         	log_info("AOF Length: %d", keyValueLength);
-            memset(&aof[0], 0, sizeof(aof));
+			memset(&aof[0], 0, buffer_size);
 
             /* Step 2: Read the key/Value using the keyValueLength */
            	if( read(peer_socket, &aof, keyValueLength) < 1 ){
-            	log_error("Error on receiving aof file --> %s", strerror(errno));
+				log_error("Error on receiving aof file --> %s", socket_strerror(errno));
             	goto error;
             }
         }
        	loga("Key: %d/%d - Redis serialized form: \n%s", i+1,numberOfKeys,aof);
        	redis_written_bytes = write(redis_socket, &aof, keyValueLength);
        	if( redis_written_bytes < 1 ){
-        	log_error("Error on writing to Redis, bytes: %d --> %s", redis_written_bytes, strerror(errno));
+			log_error("Error on writing to Redis, bytes: %d --> %s", redis_written_bytes, socket_strerror(errno));
         	goto error;
         }
        	loga("Bytes written to Redis %d", redis_written_bytes);
@@ -192,6 +189,10 @@ entropy_rcv_start(int peer_socket, int header_size, int buffer_size, int cipher_
 
   	if(redis_socket > -1)
   		close(redis_socket);
+
+	free(aof);
+	free(buff);
+	free(ciphertext);
 
   	return DN_OK;
 
@@ -201,6 +202,10 @@ error:
   		close(redis_socket);
   		log_error("entropy rcv closing redis socket because of error.");
   	}
+
+	free(aof);
+	free(buff);
+	free(ciphertext);
 
   	return DN_ERROR;
 }

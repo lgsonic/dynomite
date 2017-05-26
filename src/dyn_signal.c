@@ -27,14 +27,19 @@
 #include "dyn_signal.h"
 
 static struct signal signals[] = {
+#ifndef WIN32
     { SIGUSR1, "SIGUSR1", 0,                 signal_handler },
     { SIGUSR2, "SIGUSR2", 0,                 signal_handler },
     { SIGTTIN, "SIGTTIN", 0,                 signal_handler },
     { SIGTTOU, "SIGTTOU", 0,                 signal_handler },
     { SIGHUP,  "SIGHUP",  0,                 signal_handler },
+#endif
     { SIGINT,  "SIGINT",  0,                 signal_handler },
-    { SIGSEGV, "SIGSEGV", (int)SA_RESETHAND, signal_handler },
+    { SIGSEGV, "SIGSEGV", 0,                 signal_handler },
+#ifndef WIN32
+	{ SIGSEGV, "SIGSEGV", (int)SA_RESETHAND, signal_handler },
     { SIGPIPE, "SIGPIPE", 0,                 SIG_IGN },
+#endif
     { 0,        NULL,     0,                 NULL }
 };
 
@@ -46,6 +51,7 @@ static struct signal signals[] = {
 rstatus_t
 signal_init(void)
 {
+#ifndef WIN32
     struct signal *sig;
 
     for (sig = signals; sig->signo != 0; sig++) {
@@ -64,7 +70,7 @@ signal_init(void)
             return DN_ERROR;
         }
     }
-
+#endif
     return DN_OK;
 }
 
@@ -93,6 +99,7 @@ signal_handler(int signo)
     done = false;
 
     switch (signo) {
+#ifndef WIN32
     case SIGUSR1:
         break;
 
@@ -113,7 +120,7 @@ signal_handler(int signo)
         actionstr = ", reopening log file";
         action = log_reopen;
         break;
-
+#endif
     case SIGINT:
         done = true;
         actionstr = ", exiting";

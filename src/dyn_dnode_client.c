@@ -103,7 +103,9 @@ dnode_client_close_stats(struct context *ctx, struct server_pool *pool, err_t er
     case ENOTCONN:
     case ENETDOWN:
     case ENETUNREACH:
-    case EHOSTDOWN:
+#ifdef EHOSTDOWN
+	case EHOSTDOWN:
+#endif
     case EHOSTUNREACH:
     default:
         //fix this also
@@ -182,7 +184,7 @@ dnode_client_close(struct context *ctx, struct conn *conn)
 
     status = close(conn->sd);
     if (status < 0) {
-        log_error("dyn: close c %d failed, ignored: %s", conn->sd, strerror(errno));
+		log_error("dyn: close c %d failed, ignored: %s", conn->sd, socket_strerror(errno));
     }
     conn->sd = -1;
 

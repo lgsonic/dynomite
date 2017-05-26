@@ -5,7 +5,6 @@
 
 #include <stdlib.h>
 #include <stdio.h>
-#include <unistd.h>
 
 #include "dyn_core.h"
 #include "dyn_conf.h"
@@ -397,7 +396,7 @@ dnode_peer_ack_err(struct context *ctx, struct conn *conn, struct msg *req)
              "len %"PRIu32" type %d from c %d%c %s", conn_get_type_string(conn),
              conn->sd, req->id, req->parent_id, req->mlen, req->type,
              c_conn->sd, conn->err ? ':' : ' ',
-             conn->err ? strerror(conn->err): " ");
+			 conn->err ? socket_strerror(conn->err) : " ");
     rstatus_t status =
             conn_handle_response(c_conn, req->parent_id ? req->parent_id : req->id,
                                  rsp);
@@ -453,7 +452,7 @@ dnode_peer_failure(struct context *ctx, struct node *server)
     status = dnode_peer_pool_update(pool);
     if (status != DN_OK) {
         log_error("dyn: updating peer pool '%.*s' failed: %s",
-                  pool->name.len, pool->name.data, strerror(errno));
+                  pool->name.len, pool->name.data, socket_strerror(errno));
     }
 }
 
@@ -483,7 +482,9 @@ dnode_peer_close_stats(struct context *ctx, struct conn *conn)
     case ENOTCONN:
     case ENETDOWN:
     case ENETUNREACH:
-    case EHOSTDOWN:
+#ifdef EHOSTDOWN
+	case EHOSTDOWN:
+#endif
     case EHOSTUNREACH:
     default:
         stats_pool_incr(ctx, peer_err);
@@ -565,7 +566,7 @@ dnode_peer_close(struct context *ctx, struct conn *conn)
 
     status = close(conn->sd);
     if (status < 0) {
-        log_error("dyn: close s %d failed, ignored: %s", conn->sd, strerror(errno));
+		log_error("dyn: close s %d failed, ignored: %s", conn->sd, socket_strerror(errno));
     }
     conn->sd = -1;
 
@@ -596,7 +597,7 @@ dnode_peer_each_preconnect(void *elem, void *data)
     status = conn_connect(sp->ctx, conn);
     if (status != DN_OK) {
         log_warn("dyn: connect to peer '%.*s' failed, ignored: %s",
-                peer->endpoint.pname.len, peer->endpoint.pname.data, strerror(errno));
+                peer->endpoint.pname.len, peer->endpoint.pname.data, socket_strerror(errno));
         dnode_peer_close(sp->ctx, conn);
     }
 
@@ -633,7 +634,7 @@ dnode_peer_close_socket(struct context *ctx, struct conn *conn)
     if (conn != NULL) {
         status = close(conn->sd);
         if (status < 0) {
-            log_error("dyn: close s %d failed, ignored: %s", conn->sd, strerror(errno));
+			log_error("dyn: close s %d failed, ignored: %s", conn->sd, socket_strerror(errno));
         }
     }
 
@@ -1203,7 +1204,11 @@ dnode_peer_pool_server_conn(struct context *ctx, struct node *peer)
 
         dnode_peer_close_socket(ctx, conn);
         if (conn_connect(ctx, conn) != DN_OK) {
-            conn->err = EHOSTDOWN;
+#ifdef EHOSTDOWN
+			conn->err = EHOSTDOWN;
+#else
+			conn->err = EHOSTUNREACH;
+#endif
             dnode_peer_close(ctx, conn);
             return NULL;
         }

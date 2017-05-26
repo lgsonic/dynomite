@@ -8,7 +8,6 @@
 #include <math.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <unistd.h>
 
 #include "dyn_core.h"
 #include "dyn_conf.h"

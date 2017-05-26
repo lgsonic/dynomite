@@ -1,8 +1,5 @@
 #include <stdio.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
 #include <stdlib.h>
-#include <netdb.h>
 
 #include "dyn_seeds_provider.h"
 #include "dyn_core.h"
@@ -30,7 +27,7 @@
 #endif
 
 static char * floridaIp   = NULL;
-static int    floridaPort = NULL;
+static int    floridaPort = 0;
 static char * request     = NULL;
 static int  isOsVarEval   = 0;
 

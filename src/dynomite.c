@@ -22,13 +22,8 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <signal.h>
 #include <getopt.h>
-#include <fcntl.h>
-#include <sys/resource.h>
-#include <sys/stat.h>
-#include <sys/utsname.h>
 
 #include "dyn_core.h"
 #include "dyn_conf.h"
@@ -98,6 +93,7 @@ static char short_options[] = "hVtdDgv:o:c:s:i:a:p:m:M:x:y";
 static rstatus_t
 dn_daemonize(int dump_core)
 {
+#ifndef WIN32
     rstatus_t status;
     pid_t pid, sid;
     int fd;
@@ -193,13 +189,14 @@ dn_daemonize(int dump_core)
             return DN_ERROR;
         }
     }
-
+#endif
     return DN_OK;
 }
 
 static void
 dn_print_run(struct instance *nci)
 {
+#ifndef WIN32
     int status;
     struct utsname name;
 
@@ -211,7 +208,7 @@ dn_print_run(struct instance *nci)
              VERSION, name.sysname, name.release, name.machine,
              nci->pid);
     }
-
+#endif
     loga("run, rabbit run / dig that hole, forget the sun / "
          "and when at last the work is done / don't sit down / "
          "it's time to dig another one");
@@ -266,6 +263,7 @@ dn_show_usage(void)
 static rstatus_t
 dn_create_pidfile(struct instance *nci)
 {
+#ifndef WIN32
     char pid[DN_UINTMAX_MAXLEN];
     int fd, pid_len;
     ssize_t n;
@@ -288,13 +286,14 @@ dn_create_pidfile(struct instance *nci)
     }
 
     close(fd);
-
+#endif
     return DN_OK;
 }
 
 static void
 dn_remove_pidfile(struct instance *nci)
 {
+#ifndef WIN32
     int status;
 
     status = unlink(nci->pid_filename);
@@ -302,6 +301,7 @@ dn_remove_pidfile(struct instance *nci)
         log_error("unlink of pid file '%s' failed, ignored: %s",
                   nci->pid_filename, strerror(errno));
     }
+#endif
 }
 
 /**
@@ -451,8 +451,8 @@ dn_get_options(int argc, char **argv, struct instance *nci)
             }
 
             if (value < DN_MBUF_MIN_SIZE || value > DN_MBUF_MAX_SIZE) {
-                log_stderr("dynomite: mbuf chunk size must be between %zu and"
-                           " %zu bytes", DN_MBUF_MIN_SIZE, DN_MBUF_MAX_SIZE);
+				log_stderr("dynomite: mbuf chunk size must be between %"PRIuPTR" and"
+                           " %"PRIuPTR" bytes", DN_MBUF_MIN_SIZE, DN_MBUF_MAX_SIZE);
                 return DN_ERROR;
             }
 
@@ -472,8 +472,8 @@ dn_get_options(int argc, char **argv, struct instance *nci)
             }
 
             if (value < DN_MIN_ALLOC_MSGS || value > DN_MAX_ALLOC_MSGS) {
-                log_stderr("dynomite: max allocated messages buffer must be between %zu and"
-                           " %zu messages", DN_MIN_ALLOC_MSGS, DN_MAX_ALLOC_MSGS);
+                log_stderr("dynomite: max allocated messages buffer must be between %"PRIuPTR" and"
+                           " %"PRIuPTR" messages", DN_MIN_ALLOC_MSGS, DN_MAX_ALLOC_MSGS);
                 return DN_ERROR;
             }
 
@@ -650,9 +650,11 @@ dn_run(struct instance *nci)
 static void
 dn_coredump_init(void)
 {
+#ifndef WIN32
    struct rlimit core_limits;
    core_limits.rlim_cur = core_limits.rlim_max = RLIM_INFINITY;
    setrlimit(RLIMIT_CORE, &core_limits);
+#endif
 }
 
 int
@@ -682,6 +684,11 @@ main(int argc, char **argv)
 
         exit(0);
     }
+
+#ifdef WIN32
+	WSADATA wsaData;
+	WSAStartup(MAKEWORD(2, 2), &wsaData);
+#endif
 
     if (test_conf) {
         if (!dn_test_conf(&nci)) {

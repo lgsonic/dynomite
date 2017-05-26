@@ -17,21 +17,17 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <fcntl.h> // for open
-#include <unistd.h> //for close
 #include <math.h> // to do ceil for number of chunks
 
 #include <openssl/conf.h>
 #include <openssl/evp.h>
 #include <openssl/err.h>
 
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-
 #include "dyn_core.h"
 
+#ifdef WIN32
+#include <openssl/applink.c>
+#endif
 
 /**
  * Anti - Entropy
@@ -264,7 +260,8 @@ error:
 static void
 entropy_conn_stop(struct entropy *cn)
 {
-    close(cn->sd);
+	if (cn->sd > 0)
+		close(cn->sd);
 }
 
 /*
@@ -300,26 +297,26 @@ entropy_listen(struct entropy *cn)
 
     cn->sd = socket(si.family, SOCK_STREAM, 0);
     if (cn->sd < 0) {
-        log_error("anti-entropy socket failed: %s", strerror(errno));
+		log_error("anti-entropy socket failed: %s", socket_strerror(errno));
         return DN_ERROR;
     }
 
     status = dn_set_reuseaddr(cn->sd);
     if (status < 0) {
-        log_error("anti-entropy set reuseaddr on m %d failed: %s", cn->sd, strerror(errno));
+		log_error("anti-entropy set reuseaddr on m %d failed: %s", cn->sd, socket_strerror(errno));
         return DN_ERROR;
     }
 
     status = bind(cn->sd, (struct sockaddr *)&si.addr, si.addrlen);
     if (status < 0) {
         log_error(" anti-entropy bind on m %d to addr '%.*s:%u' failed: %s", cn->sd,
-                  cn->addr.len, cn->addr.data, cn->port, strerror(errno));
+                  cn->addr.len, cn->addr.data, cn->port, socket_strerror(errno));
         return DN_ERROR;
     }
 
     status = listen(cn->sd, SOMAXCONN);
     if (status < 0) {
-        log_error("anti-entropy listen on m %d failed: %s", cn->sd, strerror(errno));
+		log_error("anti-entropy listen on m %d failed: %s", cn->sd, socket_strerror(errno));
         return DN_ERROR;
     }
 
@@ -352,8 +349,11 @@ entropy_key_iv_load(struct context *ctx){
     }
 
     /* 2. allocate char based on the length in the string arrays */
-    char key_file_name[pool->recon_key_file.len + 1];
-    char iv_file_name[pool->recon_iv_file.len + 1];
+    char *key_file_name;
+    char *iv_file_name;
+
+	key_file_name = (char*)malloc(pool->recon_key_file.len + 1);
+	iv_file_name = (char*)malloc(pool->recon_iv_file.len + 1);
 
     /* copy the content to the allocated array */
     memcpy(key_file_name, pool->recon_key_file.data, pool->recon_key_file.len);
@@ -366,23 +366,23 @@ entropy_key_iv_load(struct context *ctx){
     /* 3. checking if the key and iv files exist using access */
     if( access(key_file_name, F_OK ) < 0 ) {
     	log_error("Error: file %s does not exist", key_file_name);
-        return DN_ERROR;
+        goto err;
     }
     else if( access(iv_file_name, F_OK ) < 0 ) {
     	log_error("Error: file %s does not exist", iv_file_name);
-        return DN_ERROR;
+		goto err;
     }
 
     /* 4. loading the .pem files */
     FILE *key_file = fopen(key_file_name,"r");
     if(key_file == NULL){
     	log_error("opening key.pem file failed %s", pool->recon_key_file);
-    	return DN_ERROR;
+		goto err;
     }
     FILE *iv_file = fopen(iv_file_name,"r");
 	if(iv_file == NULL){
 	    log_error("opening iv.pem file failed %s", pool->recon_iv_file);
-	    return DN_ERROR;
+		goto err;
 	}
 
 	/* 5. using the file descriptor to do some checking with the BUFFER_SIZE */
@@ -390,30 +390,30 @@ entropy_key_iv_load(struct context *ctx){
     if (fstat(fd, &file_stat) < 0)   					 /* Get the file size */
     {
         log_error("Error fstat --> %s", strerror(errno));
-    	return DN_ERROR;
+		goto err;
     }
 
     if (file_stat.st_size > BUFFER_SIZE){			/* Compare file size with BUFFER_SIZE */
        	log_error("key file size is bigger then the buffer size");
-   	    return DN_ERROR;
+		goto err;
     }
 
     fd = fileno(iv_file);
     if (fstat(fd, &file_stat) < 0)
     {
     	log_error("Error fstat --> %s", strerror(errno));
- 	    return DN_ERROR;
+		goto err;
     }
 
     if (file_stat.st_size > BUFFER_SIZE){
     	log_error("IV file size is bigger then the buffer size");
-	    return DN_ERROR;
+		goto err;
     }
 
     /* 6. reading the files for the key and iv */
     if (fgets(buff,BUFFER_SIZE-1,key_file) == NULL){
        	log_error("Processing Key file error");
-       	return DN_ERROR;
+		goto err;
     }
   //  theKey = (unsigned char *)buff;
     loga("key loaded: %s", theKey);
@@ -421,12 +421,21 @@ entropy_key_iv_load(struct context *ctx){
     memset( buff, '\0', BUFFER_SIZE );
     if (fgets(buff,BUFFER_SIZE-1,iv_file) == NULL){
     	log_error("Processing IV file error");
-    	return DN_ERROR;
+		goto err;
     }
    // theIv = (unsigned char *)buff;
     loga("iv loaded: %s", theIv);
 
+	free(key_file_name);
+	free(iv_file_name);
+
     return DN_OK;
+
+err:
+	free(key_file_name);
+	free(iv_file_name);
+
+	return DN_ERROR;
 }
 
 
@@ -525,41 +534,41 @@ entropy_callback(void *arg1, void *arg2)
     /* Read header from Lepton */
     uint32_t magic = 0;
     if( read(peer_socket, &magic, sizeof(uint32_t)) < 1) {
-        log_error("Error on processing header from Lepton --> %s", strerror(errno));
+		log_error("Error on processing header from Lepton --> %s", socket_strerror(errno));
     	goto error;
     }
     magic = ntohl(magic);
 
     uint32_t sndOrRcv = 0;
     if( read(peer_socket, &sndOrRcv, sizeof(uint32_t)) < 1) {
-        log_error("Error on processing header from Lepton --> %s", strerror(errno));
+		log_error("Error on processing header from Lepton --> %s", socket_strerror(errno));
     	goto error;
     }
     sndOrRcv = ntohl(sndOrRcv);
 
     uint32_t headerSize;
     if( read(peer_socket, &headerSize, sizeof(uint32_t)) < 1) {
-        log_error("Error on processing header size from Lepton --> %s", strerror(errno));
+		log_error("Error on processing header size from Lepton --> %s", socket_strerror(errno));
     	goto error;
     }
     headerSize = ntohl(headerSize);
 
     uint32_t bufferSize;
     if( read(peer_socket, &bufferSize, sizeof(uint32_t)) < 1) {
-        log_error("Error on processing buffer size from Lepton --> %s", strerror(errno));
+		log_error("Error on processing buffer size from Lepton --> %s", socket_strerror(errno));
     	goto error;
     }
     bufferSize = ntohl(bufferSize);
 
     uint32_t cipherSize;
     if( read(peer_socket, &cipherSize, sizeof(uint32_t)) < 1) {
-        log_error("Error on processing cipher size from Lepton --> %s", strerror(errno));
+		log_error("Error on processing cipher size from Lepton --> %s", socket_strerror(errno));
        	goto error;
     }
     cipherSize = ntohl(cipherSize);
 
     if (magic != MAGIC_NUMBER) {
-    	log_error("Magic number not correct or not receiver properly --> %s ----> %d", strerror(errno),magic);
+		log_error("Magic number not correct or not receiver properly --> %s ----> %d", socket_strerror(errno), magic);
     	log_error("Expected magic number: %d", MAGIC_NUMBER);
     	goto error;
     }
@@ -568,7 +577,7 @@ entropy_callback(void *arg1, void *arg2)
     }
 
     if (sndOrRcv != 1 && sndOrRcv !=2) {
-    	log_error("Error on receiving PULL/PUSH --> %s ----> %d", strerror(errno),sndOrRcv);
+		log_error("Error on receiving PULL/PUSH --> %s ----> %d", socket_strerror(errno), sndOrRcv);
     	goto error;
     }
 
@@ -640,11 +649,17 @@ error:
 
 }
 
-void *
+#ifdef WIN32
+static void
+#else
+static void *
+#endif
 entropy_loop(void *arg)
 {
     event_loop_entropy(entropy_callback, arg);
+#ifndef WIN32
 	return NULL;
+#endif
 }
 
 

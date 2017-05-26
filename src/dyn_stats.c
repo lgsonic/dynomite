@@ -22,13 +22,6 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
-
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/resource.h>
-#include <netinet/in.h>
-#include <ctype.h>
 
 #include "dyn_core.h"
 #include "dyn_histogram.h"
@@ -397,14 +390,14 @@ stats_create_bufs(struct stats *st)
     size = DN_ALIGN(size, DN_ALIGNMENT);
     st->buf.data = dn_alloc(size);
     if (st->buf.data == NULL) {
-        log_error("create stats buffer of size %zu failed: %s", size,
+		log_error("create stats buffer of size %"PRIuPTR" failed: %s", size,
                    strerror(errno));
         return DN_ENOMEM;
     }
     st->buf.size = size;
     st->buf.len = 0;
 
-    log_debug(LOG_DEBUG, "stats info buffer size %zu", size);
+	log_debug(LOG_DEBUG, "stats info buffer size %"PRIuPTR"", size);
 
     st->clus_desc_buf.len = 0;
     st->clus_desc_buf.size = 0;
@@ -942,7 +935,7 @@ stats_resize_clus_desc_buf(struct stats *st)
         stats_destroy_buf(&st->clus_desc_buf);
         st->clus_desc_buf.data = dn_alloc(size);
         if (st->clus_desc_buf.data == NULL) {
-            log_error("create cluster desc buffer of size %zu failed: %s",
+			log_error("create cluster desc buffer of size %"PRIuPTR" failed: %s",
                       size, strerror(errno));
             return DN_ENOMEM;
         }
@@ -982,7 +975,7 @@ static void
 parse_request(int sd, struct stats_cmd *st_cmd)
 {
     size_t max_buf_size = 99999;
-    char mesg[max_buf_size], *reqline[3];
+	char mesg[99999], *reqline[3];
     int rcvd;
 
     memset( (void*)mesg, (int)'\0', max_buf_size );
@@ -1154,7 +1147,7 @@ stats_http_rsp(int sd, uint8_t *content, size_t len)
 
     n = dn_sendn(sd, http_header, n);
     if (n < 0) {
-       log_error("send http headers on sd %d failed: %s", sd, strerror(errno));
+       log_error("send http headers on sd %d failed: %s", sd, socket_strerror(errno));
        close(sd);
        return DN_ERROR;
     }
@@ -1162,7 +1155,7 @@ stats_http_rsp(int sd, uint8_t *content, size_t len)
     n = dn_sendn(sd, content, len);
 
     if (n < 0) {
-       log_error("send stats on sd %d failed: %s", sd, strerror(errno));
+       log_error("send stats on sd %d failed: %s", sd, socket_strerror(errno));
        close(sd);
        return DN_ERROR;
     }
@@ -1180,7 +1173,7 @@ stats_send_rsp(struct stats *st)
 
     sd = accept(st->sd, NULL, NULL);
     if (sd < 0) {
-        log_error("accept on m %d failed: %s", st->sd, strerror(errno));
+		log_error("accept on m %d failed: %s", st->sd, socket_strerror(errno));
         return DN_ERROR;
     }
 
@@ -1315,11 +1308,17 @@ stats_loop_callback(void *arg1, void *arg2)
     stats_send_rsp(st);
 }
 
+#ifdef WIN32
+static void
+#else
 static void *
+#endif
 stats_loop(void *arg)
 {
     event_loop_stats(stats_loop_callback, arg);
+#ifndef WIN32
     return NULL;
+#endif
 }
 
 static rstatus_t
@@ -1335,26 +1334,26 @@ stats_listen(struct stats *st)
 
     st->sd = socket(si.family, SOCK_STREAM, 0);
     if (st->sd < 0) {
-        log_error("socket failed: %s", strerror(errno));
+		log_error("socket failed: %s", socket_strerror(errno));
         return DN_ERROR;
     }
 
     status = dn_set_reuseaddr(st->sd);
     if (status < 0) {
-        log_error("set reuseaddr on m %d failed: %s", st->sd, strerror(errno));
+		log_error("set reuseaddr on m %d failed: %s", st->sd, socket_strerror(errno));
         return DN_ERROR;
     }
 
     status = bind(st->sd, (struct sockaddr *)&si.addr, si.addrlen);
     if (status < 0) {
         log_error("bind on m %d to addr '%.*s:%u' failed: %s", st->sd,
-                  st->addr.len, st->addr.data, st->port, strerror(errno));
+                  st->addr.len, st->addr.data, st->port, socket_strerror(errno));
         return DN_ERROR;
     }
 
     status = listen(st->sd, SOMAXCONN);
     if (status < 0) {
-        log_error("listen on m %d failed: %s", st->sd, strerror(errno));
+		log_error("listen on m %d failed: %s", st->sd, socket_strerror(errno));
         return DN_ERROR;
     }
 

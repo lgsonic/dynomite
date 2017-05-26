@@ -1,10 +1,5 @@
 #include <stdio.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
 #include <stdlib.h>
-#include <netdb.h>
-#include <arpa/nameser.h>
-#include <resolv.h>
 #ifdef __APPLE__
 #include <arpa/nameser_compat.h>
 #endif
@@ -87,7 +82,11 @@ dns_get_seeds(struct context * ctx, struct mbuf *seeds_buf)
     unsigned char buf[BUFSIZ];
     int r = res_query(txtName, C_IN, T_TXT, buf, sizeof(buf));
     if (r == -1) {
+#ifdef WIN32
+		log_debug(LOG_DEBUG, "DNS response for %s: %s", txtName, socket_strerror(errno));
+#else
         log_debug(LOG_DEBUG, "DNS response for %s: %s", txtName, hstrerror(h_errno));
+#endif
         return DN_NOOPS;
     }
     if (r >= sizeof(buf)) {
@@ -104,7 +103,7 @@ dns_get_seeds(struct context * ctx, struct mbuf *seeds_buf)
     ns_msg m;
     int k = ns_initparse(buf, r, &m);
     if (k == -1) {
-        log_debug(LOG_DEBUG, "ns_initparse error for %s: %s", txtName, strerror(errno));
+		log_debug(LOG_DEBUG, "ns_initparse error for %s: %s", txtName, socket_strerror(errno));
         return DN_NOOPS;
     }
     int i;
@@ -112,7 +111,7 @@ dns_get_seeds(struct context * ctx, struct mbuf *seeds_buf)
     for (i = 0; i < na; ++i) {
         int k = ns_parserr(&m, ns_s_an, i, &rr);
         if (k == -1) {
-            log_debug(LOG_DEBUG, "ns_parserr for %s: %s", txtName, strerror (errno));
+			log_debug(LOG_DEBUG, "ns_parserr for %s: %s", txtName, socket_strerror(errno));
             return DN_NOOPS;
         }
         mbuf_rewind(seeds_buf);

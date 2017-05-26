@@ -21,7 +21,6 @@
  */
 
 #include <stdlib.h>
-#include <unistd.h>
 
 #include "dyn_core.h"
 #include "dyn_conf.h"
@@ -306,7 +305,7 @@ core_recv(struct context *ctx, struct conn *conn)
 	status = conn_recv(ctx, conn);
 	if (status != DN_OK) {
 		log_info("recv on %s %d failed: %s", conn_get_type_string(conn),
-				 conn->sd, strerror(errno));
+				 conn->sd, socket_strerror(errno));
 	}
 
 	return status;
@@ -320,7 +319,7 @@ core_send(struct context *ctx, struct conn *conn)
 	status = conn_send(ctx, conn);
 	if (status != DN_OK) {
 		log_info("send on %s %d failed: %s", conn_get_type_string(conn),
-				 conn->sd, strerror(errno));
+				 conn->sd, socket_strerror(errno));
 	}
 
 	return status;
@@ -337,10 +336,10 @@ core_close_log(struct conn *conn)
 		addrstr = dn_unresolve_addr(conn->addr, conn->addrlen);
 	}
 	log_debug(LOG_NOTICE, "close %s %d '%s' on event %04"PRIX32" eof %d done "
-			  "%d rb %zu sb %zu%c %s", conn_get_type_string(conn), conn->sd,
+			  "%d rb %"PRIuPTR" sb %"PRIuPTR"%c %s", conn_get_type_string(conn), conn->sd,
               addrstr, conn->events, conn->eof, conn->done, conn->recv_bytes,
               conn->send_bytes,
-              conn->err ? ':' : ' ', conn->err ? strerror(conn->err) : "");
+              conn->err ? ':' : ' ', conn->err ? socket_strerror(conn->err) : "");
 
 }
 
@@ -356,7 +355,7 @@ core_close(struct context *ctx, struct conn *conn)
 	status = event_del_conn(ctx->evb, conn);
 	if (status < 0) {
 		log_warn("event del conn %d failed, ignored: %s",
-		          conn->sd, strerror(errno));
+		          conn->sd, socket_strerror(errno));
 	}
 
 	conn_close(ctx, conn);
@@ -370,7 +369,7 @@ core_error(struct context *ctx, struct conn *conn)
 	status = dn_get_soerror(conn->sd);
 	if (status < 0) {
 	log_warn("get soerr on %s client %d failed, ignored: %s",
-             conn_get_type_string(conn), conn->sd, strerror(errno));
+             conn_get_type_string(conn), conn->sd, socket_strerror(errno));
 	}
 	conn->err = errno;
 

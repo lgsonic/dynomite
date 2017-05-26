@@ -22,7 +22,7 @@
 
 #include <dyn_token.h>
 #include <dyn_core.h>
-#include <murmur3.h>
+//#include <murmur3.h>
 
 #define MURMUR3_SEED 0xc0a1e5ce
 

@@ -22,11 +22,6 @@
 
 #include <stdlib.h>
 #include <stdarg.h>
-#include <ctype.h>
-#include <time.h>
-#include <sys/stat.h>
-#include <sys/time.h>
-#include <fcntl.h>
 
 #include "dyn_core.h"
 
@@ -152,12 +147,13 @@ _log(const char *file, int line, int panic, const char *fmt, ...)
 
     struct timeval curTime;
     gettimeofday(&curTime, NULL);
+	time_t tTime = curTime.tv_sec;
 
     char buffer [80];
-    strftime(buffer, 80, "%Y-%m-%d %H:%M:%S", localtime(&curTime.tv_sec));
+	strftime(buffer, 80, "%Y-%m-%d %H:%M:%S", localtime(&tTime));
 
     len += dn_scnprintf(buf + len, size - len, "[%.*s.%03d] %s:%d ",
-                        strlen(buffer), buffer, (int64_t)curTime.tv_usec / 1000,
+                        strlen(buffer), buffer, curTime.tv_usec / 1000,
                         file, line);
 
     va_start(args, fmt);
@@ -171,7 +167,11 @@ _log(const char *file, int line, int panic, const char *fmt, ...)
         l->nerror++;
     }
 
-    errno = errno_save;
+#ifdef WIN32
+	WSASetLastError(errno_save);
+#else
+	errno = errno_save;
+#endif
 
     if (panic) {
         abort();
@@ -202,7 +202,11 @@ _log_stderr(const char *fmt, ...)
         l->nerror++;
     }
 
-    errno = errno_save;
+#ifdef WIN32
+	WSASetLastError(errno_save);
+#else
+	errno = errno_save;
+#endif
 }
 
 /*
@@ -267,5 +271,9 @@ _log_hexdump(const char *file, int line, char *data, int datalen,
         l->nerror++;
     }
 
-    errno = errno_save;
+#ifdef WIN32
+	WSASetLastError(errno_save);
+#else
+	errno = errno_save;
+#endif
 }

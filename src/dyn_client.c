@@ -169,7 +169,9 @@ client_close_stats(struct context *ctx, struct server_pool *pool, err_t err,
     case ENOTCONN:
     case ENETDOWN:
     case ENETUNREACH:
+#ifdef EHOSTDOWN
     case EHOSTDOWN:
+#endif
     case EHOSTUNREACH:
     default:
         stats_pool_incr(ctx, client_err);
@@ -238,7 +240,7 @@ client_close(struct context *ctx, struct conn *conn)
 
     status = close(conn->sd);
     if (status < 0) {
-        log_error("close c %d failed, ignored: %s", conn->sd, strerror(errno));
+		log_error("close c %d failed, ignored: %s", conn->sd, socket_strerror(errno));
     }
     conn->sd = -1;
     client_unref(conn);
@@ -421,7 +423,7 @@ req_forward_error(struct context *ctx, struct conn *conn, struct msg *msg,
     if (log_loggable(LOG_INFO)) {
        log_debug(LOG_INFO, "forward req %"PRIu64" len %"PRIu32" type %d from "
                  "c %d failed: %s", msg->id, msg->mlen, msg->type, conn->sd,
-                 strerror(err));
+				 socket_strerror(err));
     }
 
     if (!msg->expect_datastore_reply) {
@@ -644,7 +646,11 @@ admin_local_req_forward(struct context *ctx, struct conn *c_conn, struct msg *ms
 
     struct conn *p_conn = dnode_peer_pool_server_conn(ctx, peer);
     if (p_conn == NULL) {
+#ifdef EHOSTDOWN
         c_conn->err = EHOSTDOWN;
+#else
+		c_conn->err = EHOSTUNREACH;
+#endif
         req_forward_error(ctx, c_conn, msg, c_conn->err);
         return;
     }

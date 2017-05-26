@@ -378,6 +378,10 @@ struct stats_cmd {
 
 #define stats_pool_decr_by(_ctx, _name, _val)
 
+#define stats_pool_set_ts(_ctx, _name, _val)
+
+#define stats_pool_get_ts(_ctx, _name)   
+
 #define stats_pool_set_val(_ctx, _name, _val)
 
 #define stats_pool_get_val(_ctx, _name)

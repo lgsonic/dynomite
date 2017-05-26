@@ -52,7 +52,7 @@
 #elif HAVE_EVENT_PORTS
 # define DN_HAVE_EVENT_PORTS 1
 #else
-# error missing scalable I/O event notification mechanism
+# define DN_HAVE_SELECT 1
 #endif
 
 #ifdef HAVE_LITTLE_ENDIAN
@@ -112,14 +112,32 @@ struct dyn_ring;
 #include <errno.h>
 #include <limits.h>
 #include <time.h>
-#include <unistd.h>
-#include <pthread.h>
-
+#include <ctype.h>
+#include <fcntl.h>
 #include <sys/types.h>
+#include <sys/stat.h>
+
+#ifdef WIN32
+#include "dyn_util_win.h"
+#else
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/time.h>
+#include <sys/ioctl.h>
+#include <sys/resource.h>
+#include <sys/utsname.h>
+#include <sys/uio.h>
+#include <sys/select.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
+#include <arpa/inet.h>
+#include <arpa/nameser.h>
+#include <unistd.h>
+#include <netdb.h>
+#include <pthread.h>
+#include <resolv.h>
+#define socket_strerror(e) strerror(e)
+#endif
 
 #include "dyn_types.h"
 #include "dyn_array.h"

@@ -20,8 +20,6 @@
  * limitations under the License.
  */
 
-#include <sys/un.h>
-
 #include "dyn_core.h"
 #include "dyn_server.h"
 #include "dyn_proxy.h"
@@ -85,7 +83,7 @@ proxy_close(struct context *ctx, struct conn *conn)
 
     status = close(conn->sd);
     if (status < 0) {
-        log_error("close p %d failed, ignored: %s", conn->sd, strerror(errno));
+		log_error("close p %d failed, ignored: %s", conn->sd, socket_strerror(errno));
     }
     conn->sd = -1;
 
@@ -153,13 +151,20 @@ proxy_accept(struct context *ctx, struct conn *p)
     for (;;) {
         sd = accept(p->sd, NULL, NULL);
         if (sd < 0) {
+#ifdef WIN32
+			if (errno == WSAEINTR) {
+#else
             if (errno == EINTR) {
+#endif
                 log_warn("accept on %s %d not ready - eintr",
                          conn_get_type_string(p), p->sd);
                 continue;
             }
-
+#ifdef WIN32
+			if (errno == WSAEWOULDBLOCK) {
+#else
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
+#endif
                 p->recv_ready = 0;
                 return DN_OK;
             }
@@ -170,7 +175,7 @@ proxy_accept(struct context *ctx, struct conn *p)
              */
 
             log_error("accept on %s %d failed: %s",
-                      conn_get_type_string(p), p->sd, strerror(errno));
+                      conn_get_type_string(p), p->sd, socket_strerror(errno));
             return DN_ERROR;
         }
 
@@ -180,10 +185,10 @@ proxy_accept(struct context *ctx, struct conn *p)
     c = conn_get(p->owner, true);
     if (c == NULL) {
         log_error("get conn for CLIENT %d from %s %d failed: %s", sd,
-                  conn_get_type_string(p), p->sd, strerror(errno));
+                  conn_get_type_string(p), p->sd, socket_strerror(errno));
         status = close(sd);
         if (status < 0) {
-            log_error("close c %d failed, ignored: %s", sd, strerror(errno));
+            log_error("close c %d failed, ignored: %s", sd, socket_strerror(errno));
         }
         return DN_ENOMEM;
     }
@@ -194,7 +199,7 @@ proxy_accept(struct context *ctx, struct conn *p)
     status = dn_set_nonblocking(c->sd);
     if (status < 0) {
         log_error("set nonblock on %s %d from p %d failed: %s",
-                  conn_get_type_string(c), c->sd, p->sd, strerror(errno));
+                  conn_get_type_string(c), c->sd, p->sd, socket_strerror(errno));
         conn_close(ctx, c);
         return status;
     }
@@ -204,14 +209,14 @@ proxy_accept(struct context *ctx, struct conn *p)
         if (status < 0) {
             log_warn("set tcpnodelay on %s %d from %s %d failed, ignored: %s",
                      conn_get_type_string(c), c->sd, conn_get_type_string(p),
-                     p->sd, strerror(errno));
+                     p->sd, socket_strerror(errno));
         }
     }
 
     status = event_add_conn(ctx->evb, c);
     if (status < 0) {
         log_error("event add conn from %s %d failed: %s",conn_get_type_string(p),
-                  p->sd, strerror(errno));
+                  p->sd, socket_strerror(errno));
         conn_close(ctx, c);
         return status;
     }

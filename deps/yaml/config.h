@@ -1,0 +1,9 @@
+#ifndef CONFIG_H
+#define CONFIG_H
+
+#define YAML_VERSION_MAJOR 0
+#define YAML_VERSION_MINOR 1
+#define YAML_VERSION_PATCH 7
+#define YAML_VERSION_STRING "0.1.7"
+
+#endif

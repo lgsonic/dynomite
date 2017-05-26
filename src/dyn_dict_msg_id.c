@@ -5,7 +5,7 @@
 #  define NULL 0
 # endif
 #else
-# include <libio.h> // For NULL
+#include <stdio.h>
 #endif
 #include "dyn_types.h"
 #include "dyn_dict_msg_id.h"

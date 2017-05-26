@@ -3,20 +3,21 @@
  * Copyright (C) 2014 Netflix, Inc.
  */
 
+
+#include <stdio.h>
+
+#include "dyn_core.h"
+#include "dyn_crypto.h"
+#include "dyn_server.h"
+
 #include <openssl/pem.h>
 #include <openssl/ssl.h>
 #include <openssl/rsa.h>
 #include <openssl/evp.h>
 #include <openssl/bio.h>
 #include <openssl/err.h>
-#include <stdio.h>
 
-
-#include "dyn_core.h"
-#include "dyn_crypto.h"
-#include "dyn_server.h"
-
-static EVP_CIPHER *aes_cipher;
+static const EVP_CIPHER *aes_cipher;
 static RSA *rsa;
 static int rsa_size = 0;
 
@@ -40,13 +41,14 @@ static rstatus_t load_private_rsa_key_by_file(const struct string *pem_key_file)
         return DN_ERROR;
     }
 
-    unsigned char file_name[pem_key_file->len + 1];
+    unsigned char *file_name;
+	file_name = (unsigned char*)malloc(pem_key_file->len + 1);
     memcpy(file_name, pem_key_file->data, pem_key_file->len);
     file_name[pem_key_file->len] = '\0';
 
     if( access(file_name, F_OK ) < 0 ) {
         log_error("Error: file %s does not exist", file_name);
-        return DN_ERROR;
+		goto err;
     }
 
     if(NULL != (fp= fopen(file_name, "r")) )
@@ -55,12 +57,12 @@ static rstatus_t load_private_rsa_key_by_file(const struct string *pem_key_file)
         if(rsa == NULL)
         {
             log_error("Error: could NOT read RSA pem key file at %s", file_name);
-            return DN_ERROR;
+			goto err;
         }
 
     } else {
         log_error("Error: could NOT locate RSA pem key file at %s", file_name);
-        return DN_ERROR;
+		goto err;
     }
 
     rsa_size = RSA_size(rsa);
@@ -99,7 +101,14 @@ static rstatus_t load_private_rsa_key_by_file(const struct string *pem_key_file)
 
    */
 
+	free(file_name);
+
     return DN_OK;
+
+err:
+	free(file_name);
+
+	return DN_ERROR;
 }
 
 /**
@@ -201,24 +210,28 @@ base64_encode(const unsigned char *message, const size_t length)
 {
     BIO *bio;
     BIO *b64;
-    FILE* stream;
 
-    int encodedSize = 4*ceil((double)length/3);
+    int encodedSize = (int)(4*ceil((double)length/3));
     char *buffer = (char*)malloc(encodedSize+1);
     if(buffer == NULL) {
         fprintf(stderr, "Failed to allocate memory\n");
         exit(1);
     }
-
-    stream = fmemopen(buffer, encodedSize+1, "w");
+#ifdef WIN32
+	bio = BIO_new_mem_buf(buffer, encodedSize+1);
+#else
+    FILE* stream = fmemopen(buffer, encodedSize+1, "w");
+	bio = BIO_new_fp(stream, BIO_NOCLOSE);
+#endif
     b64 = BIO_new(BIO_f_base64());
-    bio = BIO_new_fp(stream, BIO_NOCLOSE);
     bio = BIO_push(b64, bio);
     BIO_set_flags(bio, BIO_FLAGS_BASE64_NO_NL);
     BIO_write(bio, message, length);
     (void)BIO_flush(bio);
     BIO_free_all(bio);
+#ifndef WIN32
     fclose(stream);
+#endif
 
     return buffer;
 }
@@ -236,17 +249,22 @@ base64_decode(const char *b64message, const size_t length, unsigned char **buffe
         fprintf(stderr, "Failed to allocate memory\n");
         exit(1);
     }
+#ifdef WIN32
+	bio = BIO_new_mem_buf(b64message, length);
+#else
     FILE* stream = fmemopen((char*)b64message, length, "r");
-
+	bio = BIO_new_fp(stream, BIO_NOCLOSE);
+#endif
     b64 = BIO_new(BIO_f_base64());
-    bio = BIO_new_fp(stream, BIO_NOCLOSE);
     bio = BIO_push(b64, bio);
     BIO_set_flags(bio, BIO_FLAGS_BASE64_NO_NL);
     decodedLength = BIO_read(bio, *buffer, length);
     (*buffer)[decodedLength] = '\0';
 
     BIO_free_all(bio);
+#ifndef WIN32
     fclose(stream);
+#endif
 
     return decodedLength;
 }
@@ -262,7 +280,7 @@ calc_decode_length(const char *b64input, const size_t length) {
     else if (b64input[length-1] == '=')
         padding = 1;
 
-    return (int)length*0.75 - padding;
+    return (int)(length*0.75) - padding;
 }
 
 rstatus_t
@@ -327,7 +345,7 @@ dyn_aes_encrypt(const unsigned char *msg, size_t msg_len, struct mbuf *mbuf, uns
     EVP_CIPHER_CTX_cleanup(aes_encrypt_ctx);
 
     //for encrypt, we allow to use up to the extra space
-    if (enc_msg_len + block_len > mbuf->end_extra - mbuf->last) {
+    if (enc_msg_len + block_len > (size_t)(mbuf->end_extra - mbuf->last)) {
         return DN_ERROR;
     }
 

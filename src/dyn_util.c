@@ -24,17 +24,6 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <netdb.h>
-
-#include <sys/time.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/ioctl.h>
-
-#include <netinet/in.h>
-#include <netinet/tcp.h>
 
 #include "dyn_core.h"
 
@@ -45,6 +34,10 @@
 int
 dn_set_blocking(int sd)
 {
+#ifdef WIN32
+	u_long mode = 0;
+	return ioctlsocket(sd, FIONBIO, &mode);
+#else
     int flags;
 
     flags = fcntl(sd, F_GETFL, 0);
@@ -53,11 +46,16 @@ dn_set_blocking(int sd)
     }
 
     return fcntl(sd, F_SETFL, flags & ~O_NONBLOCK);
+#endif
 }
 
 int
 dn_set_nonblocking(int sd)
 {
+#ifdef WIN32
+	u_long mode = 1;
+	return ioctlsocket(sd, FIONBIO, &mode);
+#else
     int flags;
 
     flags = fcntl(sd, F_GETFL, 0);
@@ -66,6 +64,7 @@ dn_set_nonblocking(int sd)
     }
 
     return fcntl(sd, F_SETFL, flags | O_NONBLOCK);
+#endif
 }
 
 int
@@ -77,13 +76,13 @@ dn_set_reuseaddr(int sd)
     reuse = 1;
     len = sizeof(reuse);
 
-    return setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, &reuse, len);
+    return setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse, len);
 }
 
 int
 dn_set_keepalive(int sd, int val)
 {
-    return setsockopt(sd, SOL_SOCKET, SO_KEEPALIVE, &val, sizeof(val));
+	return setsockopt(sd, SOL_SOCKET, SO_KEEPALIVE, (const char*)&val, sizeof(val));
 }
 
 /*
@@ -103,7 +102,7 @@ dn_set_tcpnodelay(int sd)
     nodelay = 1;
     len = sizeof(nodelay);
 
-    return setsockopt(sd, IPPROTO_TCP, TCP_NODELAY, &nodelay, len);
+	return setsockopt(sd, IPPROTO_TCP, TCP_NODELAY, (const char*)&nodelay, len);
 }
 
 int
@@ -117,7 +116,7 @@ dn_set_linger(int sd, int timeout)
 
     len = sizeof(linger);
 
-    return setsockopt(sd, SOL_SOCKET, SO_LINGER, &linger, len);
+	return setsockopt(sd, SOL_SOCKET, SO_LINGER, (const char*)&linger, len);
 }
 
 int
@@ -127,7 +126,7 @@ dn_set_sndbuf(int sd, int size)
 
     len = sizeof(size);
 
-    return setsockopt(sd, SOL_SOCKET, SO_SNDBUF, &size, len);
+	return setsockopt(sd, SOL_SOCKET, SO_SNDBUF, (const char*)&size, len);
 }
 
 int
@@ -137,7 +136,7 @@ dn_set_rcvbuf(int sd, int size)
 
     len = sizeof(size);
 
-    return setsockopt(sd, SOL_SOCKET, SO_RCVBUF, &size, len);
+	return setsockopt(sd, SOL_SOCKET, SO_RCVBUF, (const char*)&size, len);
 }
 
 int
@@ -149,9 +148,13 @@ dn_get_soerror(int sd)
     err = 0;
     len = sizeof(err);
 
-    status = getsockopt(sd, SOL_SOCKET, SO_ERROR, &err, &len);
+	status = getsockopt(sd, SOL_SOCKET, SO_ERROR, (char*)&err, &len);
     if (status == 0) {
-        errno = err;
+#ifdef WIN32
+		WSASetLastError(err);
+#else
+		errno = err;
+#endif
     }
 
     return status;
@@ -166,7 +169,7 @@ dn_get_sndbuf(int sd)
     size = 0;
     len = sizeof(size);
 
-    status = getsockopt(sd, SOL_SOCKET, SO_SNDBUF, &size, &len);
+	status = getsockopt(sd, SOL_SOCKET, SO_SNDBUF, (char*)&size, &len);
     if (status < 0) {
         return status;
     }
@@ -183,7 +186,7 @@ dn_get_rcvbuf(int sd)
     size = 0;
     len = sizeof(size);
 
-    status = getsockopt(sd, SOL_SOCKET, SO_RCVBUF, &size, &len);
+	status = getsockopt(sd, SOL_SOCKET, SO_RCVBUF, (char*)&size, &len);
     if (status < 0) {
         return status;
     }
@@ -254,9 +257,9 @@ _dn_alloc(size_t size, const char *name, int line)
 
     p = malloc(size);
     if (p == NULL) {
-        log_error("malloc(%zu) failed @ %s:%d", size, name, line);
+		log_error("malloc(%"PRIuPTR") failed @ %s:%d", size, name, line);
     } else {
-        log_debug(LOG_VVERB, "malloc(%zu) at %p @ %s:%d", size, p, name, line);
+		log_debug(LOG_VVERB, "malloc(%"PRIuPTR") at %p @ %s:%d", size, p, name, line);
     }
 
     return p;
@@ -290,9 +293,9 @@ _dn_realloc(void *ptr, size_t size, const char *name, int line)
 
     p = realloc(ptr, size);
     if (p == NULL) {
-        log_error("realloc(%zu) failed @ %s:%d", size, name, line);
+		log_error("realloc(%"PRIuPTR") failed @ %s:%d", size, name, line);
     } else {
-        log_debug(LOG_VVERB, "realloc(%zu) at %p @ %s:%d", size, p, name, line);
+		log_debug(LOG_VVERB, "realloc(%"PRIuPTR") at %p @ %s:%d", size, p, name, line);
     }
 
     return p;
@@ -402,7 +405,11 @@ _dn_sendn(int sd, const void *vptr, size_t n)
     while (nleft > 0) {
         nsend = send(sd, ptr, nleft, 0);
         if (nsend < 0) {
-            if (errno == EINTR) {
+#ifdef WIN32
+			if (errno == WSAEINTR) {
+#else
+			if (errno == EINTR) {
+#endif
                 continue;
             }
             return nsend;
@@ -433,9 +440,20 @@ _dn_recvn(int sd, void *vptr, size_t n)
 	while (nleft > 0) {
         nrecv = recv(sd, ptr, nleft, 0);
         if (nrecv < 0) {
-            if (errno == EINTR) {
+#ifdef WIN32
+			if (errno == WSAEINTR) {
+#else
+			if (errno == EINTR) {
+#endif
                 continue;
             }
+#ifdef WIN32
+			if (errno == WSAEWOULDBLOCK) {
+#else
+			if (errno == EAGAIN || errno == EWOULDBLOCK) {
+#endif
+				return (ssize_t)(n - nleft);
+			}
             return nrecv;
         }
         if (nrecv == 0) {
@@ -548,6 +566,7 @@ dn_resolve_inet(struct string *name, int port, struct sockinfo *si)
 static int
 dn_resolve_unix(struct string *name, struct sockinfo *si)
 {
+#ifndef WIN32
     struct sockaddr_un *un;
 
     if (name->len >= DN_UNIX_ADDRSTRLEN) {
@@ -563,7 +582,7 @@ dn_resolve_unix(struct string *name, struct sockinfo *si)
     si->family = AF_UNIX;
     si->addrlen = sizeof(*un);
     /* si->addr is an alias of un */
-
+#endif
     return 0;
 }
 

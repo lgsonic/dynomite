@@ -190,7 +190,7 @@ cmp_dyn_token(struct dyn_token *t1, struct dyn_token *t2)
 
 		if (t1-> len == t2->len) {
 			int i;
-			for (i = 0; i < t1->len; i++) {
+			for (i = 0; i < (int)t1->len; i++) {
 				uint32_t a = t1->mag[i];
 				uint32_t b = t2->mag[i];
 				if (a != b) {

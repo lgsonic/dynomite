@@ -431,7 +431,11 @@ dyn_parse_core(struct msg *r)
    log_debug(LOG_ERR, "at error for state %d and c %c", dyn_state, *p);
    r->result = MSG_PARSE_ERROR;
    r->pos = p;
+#ifdef WIN32
+   WSASetLastError(WSAEINVAL);
+#else
    errno = EINVAL;
+#endif
 
    if (log_loggable(LOG_ERR)) {
       log_hexdump(LOG_ERR, b->pos, mbuf_length(b), "parsed bad req %"PRIu64" "

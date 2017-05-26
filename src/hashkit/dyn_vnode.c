@@ -101,7 +101,7 @@ vnode_update(struct server_pool *sp)
         rack->nserver_continuum = new_cnt;
 
         int j;
-        for (j = 0; j < token_cnt; j++) {
+        for (j = 0; j < (int)token_cnt; j++) {
             struct continuum *c = &rack->continuum[orig_cnt + j];
             c->index = i;
             c->value = 0;  /* set this to an empty value, only used by ketama */

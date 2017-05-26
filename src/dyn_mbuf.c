@@ -311,7 +311,7 @@ mbuf_split(struct mhdr *h, uint8_t *pos, func_mbuf_copy_t cb, void *cbarg)
     mbuf->last = pos;
 
     log_debug(LOG_VVERB, "split into mbuf %p len %"PRIu32" and nbuf %p len "
-              "%"PRIu32" copied %zu bytes", mbuf, mbuf_length(mbuf), nbuf,
+              "%"PRIu32" copied %"PRIuPTR" bytes", mbuf, mbuf_length(mbuf), nbuf,
               mbuf_length(nbuf), size);
 
     return nbuf;
@@ -330,7 +330,7 @@ mbuf_init(struct instance *nci)
     mbuf_chunk_size = nci->mbuf_chunk_size + MBUF_ESIZE;
     mbuf_offset = mbuf_chunk_size - MBUF_HSIZE;
 
-    log_debug(LOG_DEBUG, "mbuf hsize %d chunk size %zu offset %zu length %zu",
+	log_debug(LOG_DEBUG, "mbuf hsize %d chunk size %"PRIuPTR" offset %"PRIuPTR" length %"PRIuPTR"",
               MBUF_HSIZE, mbuf_chunk_size, mbuf_offset, mbuf_offset);
 }
 
@@ -404,7 +404,7 @@ mbuf_write_uint64(struct mbuf *mbuf, uint64_t num)
 {
  
    if (num < 10) {
-      mbuf_write_char(mbuf, '0' + num);
+      mbuf_write_char(mbuf, '0' + (char)num);
       return;
    }
 

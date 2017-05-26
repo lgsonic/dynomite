@@ -94,6 +94,30 @@ event_fd(struct event_base *evb)
     return evb->evp;
 }
 
+#elif DN_HAVE_SELECT
+
+struct select_event {
+	int		sd;
+	void*	data;
+};
+
+struct event_base {
+	struct select_event *event;  /* event[] - events that were triggered */
+	int                nevent;  /* # event */
+	int                totalsds;
+	fd_set             readset;
+	fd_set             writeset;
+	fd_set             errset;
+
+	event_cb_t         cb;      /* event callback */
+};
+
+static inline int
+event_fd(struct event_base *evb)
+{
+	return 0;
+}
+
 #else
 # error missing scalable I/O event notification mechanism
 #endif

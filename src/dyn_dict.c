@@ -40,8 +40,6 @@
 #include <string.h>
 #include <stdarg.h>
 #include <limits.h>
-#include <sys/time.h>
-#include <ctype.h>
 
 #include "dyn_dict.h"
 #include "dyn_core.h"
@@ -688,7 +686,7 @@ int dictGetRandomKeys(dict *d, dictEntry **des, int count) {
     int j; /* internal hash table id, 0 or 1. */
     int stored = 0;
 
-    if (dictSize(d) < count) count = dictSize(d);
+    if ((int)dictSize(d) < count) count = dictSize(d);
     while(stored < count) {
         for (j = 0; j < 2; j++) {
             /* Pick a random point inside the hash table 0 or 1. */

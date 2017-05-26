@@ -90,7 +90,11 @@
 *   contained in the circular buffer.
 */
 
+#ifdef WIN32
+#define CBUF_Len( cbuf )        (( cbuf.m_putIdx ) - ( cbuf.m_getIdx ))
+#else
 #define CBUF_Len( cbuf )        ((typeof( cbuf.m_putIdx ))(( cbuf.m_putIdx ) - ( cbuf.m_getIdx )))
+#endif
 
 /**
 *   Appends an element to the end of the circular buffer. The

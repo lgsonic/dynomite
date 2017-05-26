@@ -6,9 +6,6 @@
 
 #include <stdlib.h>
 #include <stdlib.h>
-#include <unistd.h>
-#include <unistd.h>
-#include <ctype.h>
 
 #include "dyn_core.h"
 #include "dyn_dict.h"
@@ -312,7 +309,7 @@ gossip_forward_state(struct server_pool *sp)
                 struct string *token_str = dictGetKey(node_de);
                 //log_debug(LOG_VERB, "\tToken string          : '%.*s'", token_str->len, token_str->data);
                 int k;
-                for(k=0; k<token_str->len;k++, pos++) {
+                for(k=0; k<(int)token_str->len;k++, pos++) {
                     *pos = *(token_str->data + k);
                 }
 
@@ -347,7 +344,7 @@ gossip_forward_state(struct server_pool *sp)
                 pos += 1;
 
                 //write addresss
-                for(k=0; k<gnode->name.len; k++, pos++) {
+                for(k=0; k<(int)gnode->name.len; k++, pos++) {
                     *pos = *(gnode->name.data + k);
                 }
 
@@ -777,7 +774,11 @@ gossip_metainfo(void)
 
 }*/
 
+#ifdef WIN32
+static void
+#else
 static void *
+#endif
 gossip_loop(void *arg)
 {
     struct server_pool *sp = arg;
@@ -833,7 +834,9 @@ gossip_loop(void *arg)
     mbuf_dealloc(seeds_buf);
     seeds_buf = NULL;
 
-    return NULL;
+#ifndef WIN32
+	return NULL;
+#endif
 }
 
 

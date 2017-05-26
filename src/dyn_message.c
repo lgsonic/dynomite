@@ -23,8 +23,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include <sys/uio.h>
-
 #include "dyn_core.h"
 #include "dyn_server.h"
 #include "dyn_dnode_peer.h"
@@ -949,7 +947,7 @@ msg_recv_chain(struct context *ctx, struct conn *conn, struct msg *msg)
     if (expected_fill == -1) {
         msize = mbuf_size(mbuf);
     } else {
-        msize = (msg->dmsg->plen <= mbuf->end_extra - mbuf->last) ?
+        msize = ((int)msg->dmsg->plen <= mbuf->end_extra - mbuf->last) ?
                                      msg->dmsg->plen :
                                      mbuf->end_extra - mbuf->last;
     }
@@ -969,11 +967,11 @@ msg_recv_chain(struct context *ctx, struct conn *conn, struct msg *msg)
 
     //Only used in encryption case
     if (expected_fill != -1) {
-        if ( n >=  msg->dmsg->plen  || mbuf->end_extra == mbuf->last) {
+        if ( (uint32_t)n >=  msg->dmsg->plen  || mbuf->end_extra == mbuf->last) {
             //log_debug(LOG_VERB, "About to decrypt this mbuf as it is full or eligible!");
             struct mbuf *nbuf = NULL;
 
-            if (n >=  msg->dmsg->plen) {
+			if ((uint32_t)n >= msg->dmsg->plen) {
                 nbuf = mbuf_get();
 
                 if (nbuf == NULL) {

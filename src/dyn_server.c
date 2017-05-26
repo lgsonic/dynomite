@@ -21,7 +21,6 @@
  */
 
 #include <stdlib.h>
-#include <unistd.h>
 
 #include "dyn_core.h"
 #include "dyn_server.h"
@@ -203,7 +202,7 @@ datastore_preconnect(struct datastore *datastore)
 	status = conn_connect(pool->ctx, conn);
 	if (status != DN_OK) {
 		log_warn("connect to datastore '%.*s' failed, ignored: %s",
-				datastore->endpoint.pname.len, datastore->endpoint.pname.data, strerror(errno));
+				datastore->endpoint.pname.len, datastore->endpoint.pname.data, socket_strerror(errno));
 		server_close(pool->ctx, conn);
 	}
 
@@ -270,7 +269,7 @@ server_failure(struct context *ctx, struct datastore *server)
 	status = server_pool_run(pool);
 	if (status != DN_OK) {
 		log_error("updating pool '%.*s' failed: %s",
-				pool->name.len, pool->name.data, strerror(errno));
+				pool->name.len, pool->name.data, socket_strerror(errno));
 	}
 }
 
@@ -298,7 +297,9 @@ server_close_stats(struct context *ctx, struct datastore *server, err_t err,
 	case ENOTCONN:
 	case ENETDOWN:
 	case ENETUNREACH:
+#ifdef EHOSTDOWN
 	case EHOSTDOWN:
+#endif
 	case EHOSTUNREACH:
 	default:
 		stats_server_incr(ctx, server_err);
@@ -348,7 +349,7 @@ server_ack_err(struct context *ctx, struct conn *conn, struct msg *req)
              "len %"PRIu32" type %d from c %d%c %s", conn_get_type_string(conn),
              conn->sd, req->id, req->parent_id,
              req->mlen, req->type, c_conn->sd, conn->err ? ':' : ' ',
-             conn->err ? strerror(conn->err): " ");
+			 conn->err ? socket_strerror(conn->err) : " ");
     rstatus_t status =
             conn_handle_response(c_conn, req->parent_id ? req->parent_id : req->id,
                                  rsp);
@@ -425,7 +426,7 @@ server_close(struct context *ctx, struct conn *conn)
 
 	status = close(conn->sd);
 	if (status < 0) {
-		log_error("close s %d failed, ignored: %s", conn->sd, strerror(errno));
+		log_error("close s %d failed, ignored: %s", conn->sd, socket_strerror(errno));
 	}
 	conn->sd = -1;
 
@@ -491,7 +492,11 @@ server_pool_update(struct server_pool *pool)
 
 	if (now <= pool->next_rebuild) {
 		if (pool->nlive_server == 0) {
+#ifdef WIN32
+			WSASetLastError(WSAECONNREFUSED);
+#else
 			errno = ECONNREFUSED;
+#endif
 			return DN_ERROR;
 		}
 		return DN_OK;
@@ -502,7 +507,7 @@ server_pool_update(struct server_pool *pool)
 	status = server_pool_run(pool);
 	if (status != DN_OK) {
 		log_error("updating pool with dist %d failed: %s",
-				pool->dist_type, strerror(errno));
+				pool->dist_type, socket_strerror(errno));
 		return status;
 	}
 

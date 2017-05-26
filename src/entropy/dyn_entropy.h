@@ -45,7 +45,6 @@ struct entropy {
 };
 
 struct entropy *entropy_init(struct context *ctx, uint16_t entropy_port, char *entropy_ip);
-void *entropy_loop(void *arg);
 rstatus_t entropy_conn_start(struct entropy *cn);
 void entropy_conn_destroy(struct entropy *cn);
 rstatus_t entropy_listen(struct entropy *cn);
